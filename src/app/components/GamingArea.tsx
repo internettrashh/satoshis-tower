@@ -1,12 +1,23 @@
 'use client'
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Totemrock from './Totemrock';
 import { Button } from '@/components/ui/button';
 
-export default function GamingArea({ changeState, resetState, state, setState }: any) {
+interface GamingAreaProps {
+  changeState: () => void;
+  resetState: () => void;
+  state: number;
+  setState: React.Dispatch<React.SetStateAction<number>>;
+}
+
+interface Row {
+  prizes: string[];
+}
+
+export default function GamingArea({ changeState, resetState, state, setState }: GamingAreaProps) {
   const [showAll, setShowAll] = useState<boolean>(false);
-  const [BreakingRock, setBreakingRock] = useState<boolean>(false);
+  const [breakingRock, setBreakingRock] = useState<boolean>(false);
   const [isAutoPicking, setIsAutoPicking] = useState(false);
   const [lost, setLost] = useState<boolean>(false);
   const [money, setMoney] = useState<number>(0);
@@ -17,7 +28,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [multiplier, setMultiplier] = useState<number>(1);
 
-  const rows = [
+  const rows: Row[] = [
     { prizes: ['Prize 1A', 'Prize 1B', 'Prize 1C'] },
     { prizes: ['Prize 2A', 'Prize 2B', 'Prize 2C'] },
     { prizes: ['Prize 3A', 'Prize 3B', 'Prize 3C'] },
@@ -27,24 +38,24 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     { prizes: ['Prize 7A', 'Prize 7B', 'Prize 7C'] },
   ];
 
-  const [correctPrizes, setCorrectPrizes] = useState<any>([]);
+  const [correctPrizes, setCorrectPrizes] = useState<string[]>([]);
   const [currentRow, setCurrentRow] = useState<number>(rows.length - 1);
-  const [clickedPrizes, setClickedPrizes] = useState('');
+  const [clickedPrizes, setClickedPrizes] = useState<string>('');
 
-  const generateRandomCorrectPrizes = () => {
-    const randomPrizes: any = rows.map(row => {
+  const generateRandomCorrectPrizes = useCallback(() => {
+    const randomPrizes: string[] = rows.map(row => {
       const randomIndex = Math.floor(Math.random() * row.prizes.length);
       return row.prizes[randomIndex];
     });
     setCorrectPrizes(randomPrizes);
     console.log(randomPrizes);
-  };
+  }, []);
 
   useEffect(() => {
     generateRandomCorrectPrizes();
-  }, []);
+  }, [generateRandomCorrectPrizes]);
 
-  const handlePrizeClick = (rowIndex: number, colIndex: number, selectedPrize: any) => {
+  const handlePrizeClick = useCallback((rowIndex: number, colIndex: number, selectedPrize: string) => {
     if (!betPlaced) {
       alert('Please place a bet before starting the game!');
       return;
@@ -68,10 +79,10 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       if (selectedPrize === correctPrizes[rowIndex]) {
         changeState();
         if (currentRow > 0) {
-          setCurrentRow(currentRow - 1);
-          setMultiplier(prev => prev * 1.5); // Increase multiplier
+          setCurrentRow(prev => prev - 1);
+          setMultiplier(prev => prev * 1.5);
         } else {
-          setCurrentRow(currentRow - 1);
+          setCurrentRow(prev => prev - 1);
           alert('You have completed all rows!');
         }
       } else {
@@ -84,11 +95,9 @@ export default function GamingArea({ changeState, resetState, state, setState }:
         setGameStarted(false);
         setMultiplier(1);
   
-        // Animate player falling
         const initialJump = 20;
         setPlayerPosition(prev => prev ? { ...prev, y: prev.y - initialJump } : null);
       
-        // Animate player falling after a short delay
         setTimeout(() => {
           let fallDistance = 0;
           const fallAnimation = setInterval(() => {
@@ -96,7 +105,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
               if (prev) {
                 fallDistance += 10;
                 const newY = prev.y + fallDistance;
-                if (newY < 700) { // Increased fall distance
+                if (newY < 700) {
                   return { ...prev, y: newY };
                 } else {
                   clearInterval(fallAnimation);
@@ -106,12 +115,12 @@ export default function GamingArea({ changeState, resetState, state, setState }:
               return null;
             });
           }, 50);
-        }, 200); // Short delay before falling starts
+        }, 200);
       }
     }, 500);
-  };
-  
-  const AutoPick = () => {
+  }, [betPlaced, gameStarted, isAutoPicking, currentRow, correctPrizes, changeState, setState, resetState, rows.length]);
+
+  const AutoPick = useCallback(() => {
     if (!betPlaced) {
       alert('Please place a bet before starting the game!');
       return;
@@ -119,28 +128,23 @@ export default function GamingArea({ changeState, resetState, state, setState }:
 
     setGameStarted(true);
 
-    let currentRow = 6;
+    let currentAutoRow = rows.length - 1;
   
     const autoPickInterval = setInterval(() => {
       setBreakingRock(true);
       setIsAutoPicking(true);
-      const randomPrizeIndex = Math.floor(Math.random() * rows[currentRow].prizes.length);
-      const randomPrize = rows[currentRow].prizes[randomPrizeIndex];
-      handlePrizeClick(currentRow, randomPrizeIndex, randomPrize);
+      const randomPrizeIndex = Math.floor(Math.random() * rows[currentAutoRow].prizes.length);
+      const randomPrize = rows[currentAutoRow].prizes[randomPrizeIndex];
+      handlePrizeClick(currentAutoRow, randomPrizeIndex, randomPrize);
       
-      if (correctPrizes[currentRow] !== randomPrize) {
-        clearInterval(autoPickInterval);
-        return;
-      }
-     
-      if (lost || currentRow < 0) {
+      if (correctPrizes[currentAutoRow] !== randomPrize || lost || currentAutoRow < 0) {
         clearInterval(autoPickInterval);
         return;
       }
   
-      currentRow--;
+      currentAutoRow--;
     }, 1000);
-  };
+  }, [betPlaced, rows, correctPrizes, lost, handlePrizeClick]);
   
   useEffect(() => {
     if (state === 1) {
@@ -177,18 +181,18 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
       <div className='w-[300px] relative h-[700px] bg-black rounded-sm'>
         <div className='flex gap-3 py-7 px-4'>
-        <Button 
-  className='w-32 bg-[#1D293B] hover:bg-[#263549] focus:bg-[#141d2a] text-white'
-  onClick={() => { setIsAutoPicking(false); }}
->
-  Manual
-</Button>
           <Button 
-  className='w-32 bg-[#872219] hover:bg-[#9f2a1f] focus:bg-[#6f1c14] text-white'
-  onClick={() => { setIsAutoPicking(true); }}
->
-  AutoPick
-</Button>
+            className='w-32 bg-[#1D293B] hover:bg-[#263549] focus:bg-[#141d2a] text-white'
+            onClick={() => { setIsAutoPicking(false); }}
+          >
+            Manual
+          </Button>
+          <Button 
+            className='w-32 bg-[#872219] hover:bg-[#9f2a1f] focus:bg-[#6f1c14] text-white'
+            onClick={() => { setIsAutoPicking(true); }}
+          >
+            AutoPick
+          </Button>
         </div>
         <div className='px-4 flex flex-col gap-4'>
           <h2 className='font-medium text-white'>Bet amount</h2>
@@ -221,7 +225,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           <h2 className='text-xl text-green-600'>${money}</h2>
         </div>
         <div className='px-4 '>
-          {currentRow !== 6 
+          {currentRow !== rows.length - 1 
             ? <Button className='w-full bg-green-600' onClick={() => { alert(`Checked Out with ${money}$`); }}>Checkout</Button>
             : <Button className='w-full hidden bg-green-600'>Start</Button>}
         </div>
@@ -240,18 +244,17 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       </div>
       
       <div className='p-2 w-[480px] mr-28 relative'>
-        {/* Add this new div for the translucent black background */}
         <div 
-  className='absolute inset-0 bg-black bg-opacity-50 rounded-lg -left-6 h-[700px] z-10'
-  style={{ top: '-24px' }} // Adjust this value as needed
-></div>
+          className='absolute inset-0 bg-black bg-opacity-50 rounded-lg -left-6 h-[700px] z-10'
+          style={{ top: '-24px' }}
+        ></div>
         <div className='relative z-10'>
           {showAll 
             ? (
               <div className="grid grid-cols-3 grid-rows-7 gap-3">
                 {rows.map((row, rowIndex) => (
                   row.prizes.map((prize, prizeIndex) => (
-                    <div key={prizeIndex} className='bg-transparent'>
+                    <div key={`${rowIndex}-${prizeIndex}`} className='bg-transparent'>
                       {correctPrizes[rowIndex] === prize 
                         ? <Totemrock /> 
                         : <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' />
@@ -265,10 +268,10 @@ export default function GamingArea({ changeState, resetState, state, setState }:
               <div className="grid grid-cols-3 grid-rows-7 gap-3">
                 {rows.map((row, rowIndex) => (
                   row.prizes.map((prize, prizeIndex) => (
-                    <div key={prizeIndex} className='bg-transparent relative' onClick={() => handlePrizeClick(rowIndex, prizeIndex, prize)}>
+                    <div key={`${rowIndex}-${prizeIndex}`} className='bg-transparent relative' onClick={() => handlePrizeClick(rowIndex, prizeIndex, prize)}>
                       {rowIndex <= currentRow 
                         ? rowIndex === currentRow 
-                          ? prize === clickedPrizes && BreakingRock 
+                          ? prize === clickedPrizes && breakingRock 
                             ? <img src={`/assets/crackedBlue.png`} className="w-[124px]" alt='cracked blue rock' /> 
                             : <img src={`/assets/blueRock.png`} className="w-[124px] animate-pulse" alt='blue rock' />
                           : <img src={`/assets/basicRock.png`} className="w-[124px]" alt='basic rock' />
