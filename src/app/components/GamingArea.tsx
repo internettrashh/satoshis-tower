@@ -180,9 +180,9 @@ export default function GamingArea({ changeState, resetState, state, setState }:
 
   return (
     <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
-       <div className='absolute mt-12  top-6 right-[360px] z-50'>
+       {/* <div className='absolute mt-12  top-6 right-[360px] z-50'>
        <img src="/assets/money.png" alt="" className='w-[600px]' />
-       </div>
+       </div> */}
       <div className='w-[300px] relative h-[700px] bg-black rounded-sm'>
         <div className='flex gap-3 py-7 px-4'>
           <Button 
