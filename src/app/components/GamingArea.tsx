@@ -177,8 +177,18 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
       <div className='w-[300px] relative h-[700px] bg-black rounded-sm'>
         <div className='flex gap-3 py-7 px-4'>
-          <Button className='w-32 focus:bg-[#1D293B] bg-[#04091A]' onClick={() => { setIsAutoPicking(false); }}>Manual</Button>
-          <Button className='w-32 focus:bg-[#1D293B] bg-[#04091A]' onClick={() => { setIsAutoPicking(true); }}>AutoPick</Button>
+          <Button 
+            className='w-32 focus:bg-slate-700 bg-slate-600 hover:bg-slate-500' 
+            onClick={() => { setIsAutoPicking(false); }}
+          >
+            Manual
+          </Button>
+          <Button 
+            className='w-32 focus:bg-red-700 bg-red-600 hover:bg-red-500' 
+            onClick={() => { setIsAutoPicking(true); }}
+          >
+            AutoPick
+          </Button>
         </div>
         <div className='px-4 flex flex-col gap-4'>
           <h2 className='font-medium text-white'>Bet amount</h2>
@@ -216,7 +226,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
             : <Button className='w-full hidden bg-green-600'>Start</Button>}
         </div>
         {gameStarted && multiplier > 1 && (
-          <div className='absolute bottom-5 w-full flex flex-col items-center justify-center px-4 bg-stone-500 py-2 rounded-md'>
+          <div className='absolute bottom-5 left-1/2 transform -translate-x-1/2 w-[280px] h-[90px] flex flex-col items-center justify-center px-4 bg-stone-500 py-2 rounded-xl'>
             <h2 className='text-3xl font-bold text-green-500'>{multiplier.toFixed(1)}X</h2>
             <p className='text-white text-sm'>Cash out available: {(originalMoney * multiplier).toFixed(2)} tokens</p>
           </div>
