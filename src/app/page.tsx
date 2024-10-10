@@ -17,29 +17,47 @@ const VerticalProgressBar: React.FC<ProgressBarProps> = ({ value, maxValue, step
   const percentage = (value / maxValue) * 100;
 
   return (
-    <div className=' flex flex-col  items-centers justify-center '>
- <img className='w-20 ' src="/assets/jackpot.png" alt="" />
-
-    <div className="relative h-[600px] w-5   ml-7">
-      <Progress 
-        value={percentage} 
-        className="h-full w-full bg-gray-800 rounded-full [&>div]:bg-green-500 [&>div]:rounded-full"
+    <div className='flex flex-col items-center justify-center'>
+      <img 
+        className='ml-6 z-10' 
+        style={{
+          width: '100px',
+          marginTop: '20px',
+          marginBottom: '20px'
+        }}
+        src="/assets/jackpot.png" 
+        alt="Jackpot" 
       />
-      {steps.map((step, index) => (
-        <div 
-          key={index}
-          className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center"
-          style={{ bottom: `calc(${(index / (steps.length - 1)) * 100}% - 10px)` }}
-        >
-          <span className="text-sm text-white font-bold">{step.label}</span>
-        </div>
-      ))}
-    
-    </div>
+
+      <div className="relative h-[800px] w-5 ml-7 mb-11 -mt-10 ">
+        <Progress 
+          value={percentage} 
+          className="h-full w-full bg-gray-800 rounded-full [&>div]:bg-green-500 [&>div]:rounded-full"
+        />
+        {steps.map((step, index) => (
+          <div 
+            key={index}
+            className="absolute left-1/2 transform -translate-x-1/2 flex items-center justify-center"
+            style={{ bottom: `calc(${(index / (steps.length - 1)) * 100}% - 10px)` }}
+          >
+            <span 
+              className="text-lg text-white font-bold"
+              style={{
+                textShadow: `
+                  -3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000,
+                  -3px 0 0 #000, 3px 0 0 #000, 0 -3px 0 #000, 0 3px 0 #000,
+                  -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000
+                `
+              }}
+            >
+              {step.label}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
-
 
   const steps = [
     { value: 1, label: "0x" },
