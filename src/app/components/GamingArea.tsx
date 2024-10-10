@@ -177,18 +177,18 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
       <div className='w-[300px] relative h-[700px] bg-black rounded-sm'>
         <div className='flex gap-3 py-7 px-4'>
+        <Button 
+  className='w-32 bg-[#1D293B] hover:bg-[#263549] focus:bg-[#141d2a] text-white'
+  onClick={() => { setIsAutoPicking(false); }}
+>
+  Manual
+</Button>
           <Button 
-            className='w-32 focus:bg-slate-700 bg-slate-600 hover:bg-slate-500' 
-            onClick={() => { setIsAutoPicking(false); }}
-          >
-            Manual
-          </Button>
-          <Button 
-            className='w-32 focus:bg-red-700 bg-red-600 hover:bg-red-500' 
-            onClick={() => { setIsAutoPicking(true); }}
-          >
-            AutoPick
-          </Button>
+  className='w-32 bg-[#872219] hover:bg-[#9f2a1f] focus:bg-[#6f1c14] text-white'
+  onClick={() => { setIsAutoPicking(true); }}
+>
+  AutoPick
+</Button>
         </div>
         <div className='px-4 flex flex-col gap-4'>
           <h2 className='font-medium text-white'>Bet amount</h2>
