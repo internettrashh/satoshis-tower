@@ -3,7 +3,9 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Totemrock from './Totemrock';
 import { Button } from '@/components/ui/button';
-
+import { ConnectButton, useConnection, useActiveAddress } from 'arweave-wallet-kit';
+import { createDataItemSigner, result, message } from "@permaweb/aoconnect";
+//import { toast } from 'react-toastify';
 
 interface GamingAreaProps {
   changeState: () => void;
@@ -28,6 +30,8 @@ export default function GamingArea({ changeState, resetState, state, setState }:
   const [inputValue, setInputValue] = useState<string>('');
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [multiplier, setMultiplier] = useState<number>(1);
+  const [gameId, setGameId] = useState<string | null>(null);
+  const { connected } = useConnection();
 
   const rows: Row[] = [
     { prizes: ['Prize 1A', 'Prize 1B', 'Prize 1C'] },
@@ -56,7 +60,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     generateRandomCorrectPrizes();
   }, [generateRandomCorrectPrizes]);
 
-  const handlePrizeClick = useCallback((rowIndex: number, colIndex: number, selectedPrize: string) => {
+  const handlePrizeClick = useCallback(async (rowIndex: number, colIndex: number, selectedPrize: string) => {
     if (!betPlaced) {
       alert('Please place a bet before starting the game!');
       return;
@@ -66,64 +70,90 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       setGameStarted(true);
     }
 
-    setClickedPrizes(selectedPrize);
-    setBreakingRock(true);
-    setPlayerPosition({ row: rowIndex, col: colIndex, y: 0 });
-  
-    setTimeout(() => {
-      setBreakingRock(false);
-      if (!isAutoPicking && rowIndex !== currentRow) {
-        console.log('You can only click the current row!');
-        return;
-      }
-  
-      if (selectedPrize === correctPrizes[rowIndex]) {
-        changeState();
-        if (currentRow > 0) {
-          setCurrentRow(prev => prev - 1);
-          setMultiplier(prev => prev * 1.5);
-        } else {
-          setCurrentRow(prev => prev - 1);
-          alert('You have completed all rows!');
-        }
-      } else {
-        setState(0);
-        setMoney(0);
-        setLost(true);
-        resetState();
-        setCurrentRow(rows.length - 1);
-        setShowAll(true);
-        setGameStarted(false);
-        setMultiplier(1);
-  
-        const initialJump = 20;
-        setPlayerPosition(prev => prev ? { ...prev, y: prev.y - initialJump } : null);
-      
-        setTimeout(() => {
-          let fallDistance = 0;
-          const fallAnimation = setInterval(() => {
-            setPlayerPosition(prev => {
-              if (prev) {
-                fallDistance += 10;
-                const newY = prev.y + fallDistance;
-                if (newY < 700) {
-                  return { ...prev, y: newY };
-                } else {
-                  clearInterval(fallAnimation);
-                  return null;
+    try {
+      const response = await message({
+        process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
+        tags: [
+          { name: "Action", value: "MakeMove" },
+        ],
+        signer: createDataItemSigner(window.arweaveWallet),
+        data: JSON.stringify({ gameId: gameId, column: colIndex }),
+      });
+     
+      const { Output, Messages } = await result({
+        message: response,
+        process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
+      });
+
+      if (Messages && Messages.length > 0) {
+        const gameData = JSON.parse(Messages[0].Data);
+        console.log("Game state update:", gameData);
+
+        setClickedPrizes(selectedPrize);
+        setBreakingRock(true);
+        setPlayerPosition({ row: rowIndex, col: colIndex, y: 0 });
+
+        // Update game state based on server response
+        setMultiplier(gameData.multiplier);
+        setMoney(gameData.winnings);
+        setState(gameData.level);
+
+        if (gameData.outcome === 'reward') {
+          // Totem revealed
+          if (currentRow > 0) {
+            setCurrentRow(prev => prev - 1);
+          } else {
+            console.log('You have completed all rows!');
+          }
+        } else if (gameData.outcome === 'mine') {
+          // Red lava rock revealed - game over
+          setLost(true);
+          resetState();
+          setCurrentRow(rows.length - 1);
+          setShowAll(true);
+          setGameStarted(false);
+          
+          // Animate player falling
+          const initialJump = 20;
+          setPlayerPosition(prev => prev ? { ...prev, y: prev.y - initialJump } : null);
+        
+          setTimeout(() => {
+            let fallDistance = 0;
+            const fallAnimation = setInterval(() => {
+              setPlayerPosition(prev => {
+                if (prev) {
+                  fallDistance += 10;
+                  const newY = prev.y + fallDistance;
+                  if (newY < 700) {
+                    return { ...prev, y: newY };
+                  } else {
+                    clearInterval(fallAnimation);
+                    return null;
+                  }
                 }
-              }
-              return null;
-            });
-          }, 50);
-        }, 200);
+                return null;
+              });
+            }, 50);
+          }, 200);
+        }
+
+        if (gameData.status !== 'active') {
+          setBetPlaced(false);
+          setGameStarted(false);
+        }
       }
-    }, 500);
-  }, [betPlaced, gameStarted, isAutoPicking, currentRow, correctPrizes, changeState, setState, resetState, rows.length]);
+
+    } catch (error) {
+      console.error("Error making move:", error);
+      alert('An error occurred while making your move. Please try again.');
+    }
+
+    setBreakingRock(false);
+  }, [betPlaced, gameStarted, gameId, currentRow, rows.length, resetState, setState]);
 
   const AutoPick = useCallback(() => {
     if (!betPlaced) {
-      alert('Please place a bet before starting the game!');
+     console.log('Please place a bet before starting the game!');
       return;
     }
 
@@ -132,20 +162,20 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     let currentAutoRow = rows.length - 1;
   
     const autoPickInterval = setInterval(() => {
+      if (currentAutoRow < 0 || lost) {
+        clearInterval(autoPickInterval);
+        return;
+      }
+
       setBreakingRock(true);
       setIsAutoPicking(true);
       const randomPrizeIndex = Math.floor(Math.random() * rows[currentAutoRow].prizes.length);
       const randomPrize = rows[currentAutoRow].prizes[randomPrizeIndex];
       handlePrizeClick(currentAutoRow, randomPrizeIndex, randomPrize);
       
-      if (correctPrizes[currentAutoRow] !== randomPrize || lost || currentAutoRow < 0) {
-        clearInterval(autoPickInterval);
-        return;
-      }
-  
       currentAutoRow--;
     }, 1000);
-  }, [betPlaced, rows, correctPrizes, lost, handlePrizeClick]);
+  }, [betPlaced, rows, lost, handlePrizeClick]);
   
   useEffect(() => {
     if (state === 1) {
@@ -165,10 +195,44 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     }
   }, [state, originalMoney]);
 
-  const handlePlaceBet = () => {
+  const handlePlaceBet = async () => {
+    if (!connected) {
+      alert('Please connect your wallet to place a bet!');
+      return;
+    }
+    
     if (inputValue && parseFloat(inputValue) > 0) {
-      setOriginalMoney(parseFloat(inputValue));
-      setBetPlaced(true);
+      const betAmount = parseFloat(inputValue);
+      setOriginalMoney(betAmount);
+  
+      try {
+        const response = await message({
+          process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
+          tags: [
+            { name: "Action", value: "StartGame" },
+          ],
+          signer: createDataItemSigner(window.arweaveWallet),
+          data: JSON.stringify({ initialBet: betAmount }),
+        });
+       
+        const { Output, Messages } = await result({
+          message: response,
+          process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
+        });
+       
+        if (Messages && Messages.length > 0) {
+          const gameData = JSON.parse(Messages[0].Data);
+          const newGameId = gameData.gameId;
+          console.log("Game ID:", newGameId);
+          setGameId(newGameId);
+        }
+        console.log("Bet placed successfully");
+        setBetPlaced(true);
+      
+      } catch (error) {
+        console.error("Error placing bet:", error);
+        alert('An error occurred while placing your bet. Please try again.');
+      }
     } else {
       alert('Please enter a valid bet amount!');
     }
@@ -177,6 +241,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
   };
+
 
   return (
     <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
@@ -191,6 +256,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           >
             Manual
           </Button>
+      
           <Button 
             className='w-32 bg-[#872219] hover:bg-[#9f2a1f] focus:bg-[#6f1c14] text-white'
             onClick={() => { setIsAutoPicking(true); }}
@@ -214,6 +280,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           >
             {betPlaced ? 'Bet Placed' : 'Place Bet'}
           </Button>
+          <ConnectButton />
           {isAutoPicking && (
             <Button 
               className='w-full bg-[#23C55E] hover:bg-[#31ed76]' 

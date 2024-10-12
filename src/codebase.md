@@ -8,13 +8,27 @@
 ```
 'use client'
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Totemrock from './Totemrock';
 import { Button } from '@/components/ui/button';
+import { ConnectButton, useConnection, useActiveAddress } from 'arweave-wallet-kit';
+import { createDataItemSigner, result, message } from "@permaweb/aoconnect";
+//import { toast } from 'react-toastify';
 
-export default function GamingArea({ changeState, resetState, state, setState }: any) {
+interface GamingAreaProps {
+  changeState: () => void;
+  resetState: () => void;
+  state: number;
+  setState: React.Dispatch<React.SetStateAction<number>>;
+}
+
+interface Row {
+  prizes: string[];
+}
+
+export default function GamingArea({ changeState, resetState, state, setState }: GamingAreaProps) {
   const [showAll, setShowAll] = useState<boolean>(false);
-  const [BreakingRock, setBreakingRock] = useState<boolean>(false);
+  const [breakingRock, setBreakingRock] = useState<boolean>(false);
   const [isAutoPicking, setIsAutoPicking] = useState(false);
   const [lost, setLost] = useState<boolean>(false);
   const [money, setMoney] = useState<number>(0);
@@ -24,8 +38,10 @@ export default function GamingArea({ changeState, resetState, state, setState }:
   const [inputValue, setInputValue] = useState<string>('');
   const [gameStarted, setGameStarted] = useState<boolean>(false);
   const [multiplier, setMultiplier] = useState<number>(1);
+  const [gameId, setGameId] = useState<string | null>(null);
+  const { connected } = useConnection();
 
-  const rows = [
+  const rows: Row[] = [
     { prizes: ['Prize 1A', 'Prize 1B', 'Prize 1C'] },
     { prizes: ['Prize 2A', 'Prize 2B', 'Prize 2C'] },
     { prizes: ['Prize 3A', 'Prize 3B', 'Prize 3C'] },
@@ -35,24 +51,24 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     { prizes: ['Prize 7A', 'Prize 7B', 'Prize 7C'] },
   ];
 
-  const [correctPrizes, setCorrectPrizes] = useState<any>([]);
+  const [correctPrizes, setCorrectPrizes] = useState<string[]>([]);
   const [currentRow, setCurrentRow] = useState<number>(rows.length - 1);
-  const [clickedPrizes, setClickedPrizes] = useState('');
+  const [clickedPrizes, setClickedPrizes] = useState<string>('');
 
-  const generateRandomCorrectPrizes = () => {
-    const randomPrizes: any = rows.map(row => {
+  const generateRandomCorrectPrizes = useCallback(() => {
+    const randomPrizes: string[] = rows.map(row => {
       const randomIndex = Math.floor(Math.random() * row.prizes.length);
       return row.prizes[randomIndex];
     });
     setCorrectPrizes(randomPrizes);
     console.log(randomPrizes);
-  };
+  }, []);
 
   useEffect(() => {
     generateRandomCorrectPrizes();
-  }, []);
+  }, [generateRandomCorrectPrizes]);
 
-  const handlePrizeClick = (rowIndex: number, colIndex: number, selectedPrize: any) => {
+  const handlePrizeClick = useCallback(async (rowIndex: number, colIndex: number, selectedPrize: string) => {
     if (!betPlaced) {
       alert('Please place a bet before starting the game!');
       return;
@@ -62,93 +78,112 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       setGameStarted(true);
     }
 
-    setClickedPrizes(selectedPrize);
-    setBreakingRock(true);
-    setPlayerPosition({ row: rowIndex, col: colIndex, y: 0 });
-  
-    setTimeout(() => {
-      setBreakingRock(false);
-      if (!isAutoPicking && rowIndex !== currentRow) {
-        console.log('You can only click the current row!');
-        return;
-      }
-  
-      if (selectedPrize === correctPrizes[rowIndex]) {
-        changeState();
-        if (currentRow > 0) {
-          setCurrentRow(currentRow - 1);
-          setMultiplier(prev => prev * 1.5); // Increase multiplier
-        } else {
-          setCurrentRow(currentRow - 1);
-          alert('You have completed all rows!');
-        }
-      } else {
-        setState(0);
-        setMoney(0);
-        setLost(true);
-        resetState();
-        setCurrentRow(rows.length - 1);
-        setShowAll(true);
-        setGameStarted(false);
-        setMultiplier(1);
-  
-        // Animate player falling
-        const initialJump = 20;
-        setPlayerPosition(prev => prev ? { ...prev, y: prev.y - initialJump } : null);
-      
-        // Animate player falling after a short delay
-        setTimeout(() => {
-          let fallDistance = 0;
-          const fallAnimation = setInterval(() => {
-            setPlayerPosition(prev => {
-              if (prev) {
-                fallDistance += 10;
-                const newY = prev.y + fallDistance;
-                if (newY < 700) { // Increased fall distance
-                  return { ...prev, y: newY };
-                } else {
-                  clearInterval(fallAnimation);
-                  return null;
+    try {
+      const response = await message({
+        process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
+        tags: [
+          { name: "Action", value: "MakeMove" },
+        ],
+        signer: createDataItemSigner(window.arweaveWallet),
+        data: JSON.stringify({ gameId: gameId, column: colIndex }),
+      });
+     
+      const { Output, Messages } = await result({
+        message: response,
+        process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
+      });
+
+      if (Messages && Messages.length > 0) {
+        const gameData = JSON.parse(Messages[0].Data);
+        console.log("Game state update:", gameData);
+
+        setClickedPrizes(selectedPrize);
+        setBreakingRock(true);
+        setPlayerPosition({ row: rowIndex, col: colIndex, y: 0 });
+
+        // Update game state based on server response
+        setMultiplier(gameData.multiplier);
+        setMoney(gameData.winnings);
+        setState(gameData.level);
+
+        if (gameData.outcome === 'reward') {
+          // Totem revealed
+          if (currentRow > 0) {
+            setCurrentRow(prev => prev - 1);
+          } else {
+            console.log('You have completed all rows!');
+          }
+        } else if (gameData.outcome === 'mine') {
+          // Red lava rock revealed - game over
+          setLost(true);
+          resetState();
+          setCurrentRow(rows.length - 1);
+          setShowAll(true);
+          setGameStarted(false);
+          
+          // Animate player falling
+          const initialJump = 20;
+          setPlayerPosition(prev => prev ? { ...prev, y: prev.y - initialJump } : null);
+        
+          setTimeout(() => {
+            let fallDistance = 0;
+            const fallAnimation = setInterval(() => {
+              setPlayerPosition(prev => {
+                if (prev) {
+                  fallDistance += 10;
+                  const newY = prev.y + fallDistance;
+                  if (newY < 700) {
+                    return { ...prev, y: newY };
+                  } else {
+                    clearInterval(fallAnimation);
+                    return null;
+                  }
                 }
-              }
-              return null;
-            });
-          }, 50);
-        }, 200); // Short delay before falling starts
+                return null;
+              });
+            }, 50);
+          }, 200);
+        }
+
+        if (gameData.status !== 'active') {
+          setBetPlaced(false);
+          setGameStarted(false);
+        }
       }
-    }, 500);
-  };
-  
-  const AutoPick = () => {
+
+    } catch (error) {
+      console.error("Error making move:", error);
+      alert('An error occurred while making your move. Please try again.');
+    }
+
+    setBreakingRock(false);
+  }, [betPlaced, gameStarted, gameId, currentRow, rows.length, resetState, setState]);
+
+  const AutoPick = useCallback(() => {
     if (!betPlaced) {
-      alert('Please place a bet before starting the game!');
+     console.log('Please place a bet before starting the game!');
       return;
     }
 
     setGameStarted(true);
 
-    let currentRow = 6;
+    let currentAutoRow = rows.length - 1;
   
     const autoPickInterval = setInterval(() => {
+      if (currentAutoRow < 0 || lost) {
+        clearInterval(autoPickInterval);
+        return;
+      }
+
       setBreakingRock(true);
       setIsAutoPicking(true);
-      const randomPrizeIndex = Math.floor(Math.random() * rows[currentRow].prizes.length);
-      const randomPrize = rows[currentRow].prizes[randomPrizeIndex];
-      handlePrizeClick(currentRow, randomPrizeIndex, randomPrize);
+      const randomPrizeIndex = Math.floor(Math.random() * rows[currentAutoRow].prizes.length);
+      const randomPrize = rows[currentAutoRow].prizes[randomPrizeIndex];
+      handlePrizeClick(currentAutoRow, randomPrizeIndex, randomPrize);
       
-      if (correctPrizes[currentRow] !== randomPrize) {
-        clearInterval(autoPickInterval);
-        return;
-      }
-     
-      if (lost || currentRow < 0) {
-        clearInterval(autoPickInterval);
-        return;
-      }
-  
-      currentRow--;
+      currentAutoRow--;
     }, 1000);
-  };
+  }, [betPlaced, rows, lost, handlePrizeClick]);
   
   useEffect(() => {
     if (state === 1) {
@@ -168,10 +203,44 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     }
   }, [state, originalMoney]);
 
-  const handlePlaceBet = () => {
+  const handlePlaceBet = async () => {
+    if (!connected) {
+      alert('Please connect your wallet to place a bet!');
+      return;
+    }
+    
     if (inputValue && parseFloat(inputValue) > 0) {
-      setOriginalMoney(parseFloat(inputValue));
-      setBetPlaced(true);
+      const betAmount = parseFloat(inputValue);
+      setOriginalMoney(betAmount);
+  
+      try {
+        const response = await message({
+          process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
+          tags: [
+            { name: "Action", value: "StartGame" },
+          ],
+          signer: createDataItemSigner(window.arweaveWallet),
+          data: JSON.stringify({ initialBet: betAmount }),
+        });
+       
+        const { Output, Messages } = await result({
+          message: response,
+          process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
+        });
+       
+        if (Messages && Messages.length > 0) {
+          const gameData = JSON.parse(Messages[0].Data);
+          const newGameId = gameData.gameId;
+          console.log("Game ID:", newGameId);
+          setGameId(newGameId);
+        }
+        console.log("Bet placed successfully");
+        setBetPlaced(true);
+      
+      } catch (error) {
+        console.error("Error placing bet:", error);
+        alert('An error occurred while placing your bet. Please try again.');
+      }
     } else {
       alert('Please enter a valid bet amount!');
     }
@@ -181,22 +250,27 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     setInputValue(e.target.value);
   };
 
+
   return (
     <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
+       {/* <div className='absolute mt-12  top-6 right-[360px] z-50'>
+       <img src="/assets/money.png" alt="" className='w-[600px]' />
+       </div> */}
       <div className='w-[300px] relative h-[700px] bg-black rounded-sm'>
         <div className='flex gap-3 py-7 px-4'>
-        <Button 
-  className='w-32 bg-[#1D293B] hover:bg-[#263549] focus:bg-[#141d2a] text-white'
-  onClick={() => { setIsAutoPicking(false); }}
->
-  Manual
-</Button>
           <Button 
-  className='w-32 bg-[#872219] hover:bg-[#9f2a1f] focus:bg-[#6f1c14] text-white'
-  onClick={() => { setIsAutoPicking(true); }}
->
-  AutoPick
-</Button>
+            className='w-32 bg-[#1D293B] hover:bg-[#263549] focus:bg-[#141d2a] text-white'
+            onClick={() => { setIsAutoPicking(false); }}
+          >
+            Manual
+          </Button>
+      
+          <Button 
+            className='w-32 bg-[#872219] hover:bg-[#9f2a1f] focus:bg-[#6f1c14] text-white'
+            onClick={() => { setIsAutoPicking(true); }}
+          >
+            AutoPick
+          </Button>
         </div>
         <div className='px-4 flex flex-col gap-4'>
           <h2 className='font-medium text-white'>Bet amount</h2>
@@ -214,6 +288,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           >
             {betPlaced ? 'Bet Placed' : 'Place Bet'}
           </Button>
+          <ConnectButton />
           {isAutoPicking && (
             <Button 
               className='w-full bg-[#23C55E] hover:bg-[#31ed76]' 
@@ -229,7 +304,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           <h2 className='text-xl text-green-600'>${money}</h2>
         </div>
         <div className='px-4 '>
-          {currentRow !== 6 
+          {currentRow !== rows.length - 1 
             ? <Button className='w-full bg-green-600' onClick={() => { alert(`Checked Out with ${money}$`); }}>Checkout</Button>
             : <Button className='w-full hidden bg-green-600'>Start</Button>}
         </div>
@@ -248,18 +323,17 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       </div>
       
       <div className='p-2 w-[480px] mr-28 relative'>
-        {/* Add this new div for the translucent black background */}
         <div 
-  className='absolute inset-0 bg-black bg-opacity-50 rounded-lg -left-6 h-[700px] z-10'
-  style={{ top: '-24px' }} // Adjust this value as needed
-></div>
+          className='absolute inset-0 bg-black bg-opacity-50 rounded-lg -left-6 h-[700px] z-10'
+          style={{ top: '-24px' }}
+        ></div>
         <div className='relative z-10'>
           {showAll 
             ? (
               <div className="grid grid-cols-3 grid-rows-7 gap-3">
                 {rows.map((row, rowIndex) => (
                   row.prizes.map((prize, prizeIndex) => (
-                    <div key={prizeIndex} className='bg-transparent'>
+                    <div key={`${rowIndex}-${prizeIndex}`} className='bg-transparent'>
                       {correctPrizes[rowIndex] === prize 
                         ? <Totemrock /> 
                         : <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' />
@@ -273,10 +347,10 @@ export default function GamingArea({ changeState, resetState, state, setState }:
               <div className="grid grid-cols-3 grid-rows-7 gap-3">
                 {rows.map((row, rowIndex) => (
                   row.prizes.map((prize, prizeIndex) => (
-                    <div key={prizeIndex} className='bg-transparent relative' onClick={() => handlePrizeClick(rowIndex, prizeIndex, prize)}>
+                    <div key={`${rowIndex}-${prizeIndex}`} className='bg-transparent relative' onClick={() => handlePrizeClick(rowIndex, prizeIndex, prize)}>
                       {rowIndex <= currentRow 
                         ? rowIndex === currentRow 
-                          ? prize === clickedPrizes && BreakingRock 
+                          ? prize === clickedPrizes && breakingRock 
                             ? <img src={`/assets/crackedBlue.png`} className="w-[124px]" alt='cracked blue rock' /> 
                             : <img src={`/assets/blueRock.png`} className="w-[124px] animate-pulse" alt='blue rock' />
                           : <img src={`/assets/basicRock.png`} className="w-[124px]" alt='basic rock' />
@@ -305,6 +379,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
         </div>
       </div>
     </div>
+    
   );
 }```
 
@@ -453,6 +528,12 @@ body {
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import { ArweaveWalletKit } from "arweave-wallet-kit";
+import { ToastContainer } from 'react-toastify';
+
+
+
+
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -480,7 +561,34 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <ArweaveWalletKit
+      config={{
+        permissions: [
+          "ACCESS_ADDRESS",
+          "ACCESS_PUBLIC_KEY",
+          "SIGN_TRANSACTION",
+          "DISPATCH",
+        ],
+        ensurePermissions: true,
+       
+      }}
+      theme={{
+        displayTheme: "dark"
+      }}
+    >{children}<ToastContainer
+    position="bottom-right"
+    autoClose={5000}
+    hideProgressBar={false}
+    newestOnTop={false}
+    closeOnClick
+    rtl={false}
+    pauseOnFocusLoss
+    draggable
+    pauseOnHover
+    theme="dark"
+    
+    /></ArweaveWalletKit>
+    
       </body>
     </html>
   );
