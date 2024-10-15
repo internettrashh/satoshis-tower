@@ -25,6 +25,10 @@ interface GameHistory {
   [level: number]: GameState['row'];
 }
 
+const roundToOneDecimal = (value: number) => {
+  return Math.round(value * 10) / 10;
+};
+
 export default function GamingArea({ changeState, resetState, state, setState }: GamingAreaProps) {
   const [showAll, setShowAll] = useState<boolean>(false);
   const [breakingRock, setBreakingRock] = useState<boolean>(false);
@@ -38,9 +42,21 @@ export default function GamingArea({ changeState, resetState, state, setState }:
   const [gameHistory, setGameHistory] = useState<GameHistory>({});
   const { connected } = useConnection();
   const [currentLevel, setCurrentLevel] = useState<number>(1);
+  const [crackingRocks, setCrackingRocks] = useState<{ [key: string]: boolean }>({});
 
   const rows = 7;
   const columns = 3;
+
+  const steps = [
+    { value: 1, label: "1x" },
+    { value: 1.5, label: "1.5x" },
+    { value: 2.5, label: "2.5x" },
+    { value: 5, label: "5x" },
+    { value: 10, label: "10x" },
+    { value: 25, label: "25x" },
+    { value: 50, label: "50x" },
+    { value: 100, label: "100x" },
+  ];
 
   const handlePrizeClick = useCallback(async (rowIndex: number, colIndex: number) => {
     if (!betPlaced || !gameId) {
@@ -48,15 +64,18 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       return;
     }
 
-    if (!gameStarted) {
+    if (!gameStarted) {    
       setGameStarted(true);
     }
 
     setBreakingRock(true);
     setPlayerPosition({ row: rowIndex, col: colIndex, y: 0 });
 
-    // Add a delay to show the cracked rock
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Start cracking animation
+    setCrackingRocks(prev => ({ ...prev, [`${rowIndex}-${colIndex}`]: true }));
+
+    // Add a delay to show the cracking and shaking animation
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     try {
       const response = await makeMove(gameId, colIndex);
@@ -82,6 +101,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
         // Move to the next level after a short delay
         setTimeout(() => {
           setShowAll(false);
+          setCrackingRocks({});
         }, 1000);
       }
     } catch (error) {
@@ -92,7 +112,8 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     // Delay resetting breakingRock to allow for the reveal animation
     setTimeout(() => {
       setBreakingRock(false);
-    }, 500);
+      setCrackingRocks(prev => ({ ...prev, [`${rowIndex}-${colIndex}`]: false }));
+    }, 1500);
   }, [betPlaced, gameId, gameStarted, setState, currentLevel]);
 
   const handleLoss = () => {
@@ -269,10 +290,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
             </Button>
           )}
         </div>
-        <div className='py-10 px-4'>
-          <h2 className='text-white'>Profit/Loss</h2>
-          <h2 className='text-xl text-green-600'>${gameState?.credits || 0}</h2>
-        </div>
+       
         <div className='px-4 '>
           {gameState && gameState.status === 'active' && gameState.level > 1
             ? <Button className='w-full bg-green-600' onClick={handleCashOut}>Checkout</Button>
@@ -280,7 +298,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
         </div>
         {gameState && gameState.level >= 2 && (
           <div className='absolute bottom-5 left-1/2 transform -translate-x-1/2 w-[280px] h-[90px] flex flex-col items-center justify-center px-4 bg-stone-500 py-2 rounded-xl'>
-            <h2 className='text-3xl font-bold text-green-500'>{gameState.multiplier.toFixed(2)}X</h2>
+            <h2 className='text-3xl font-bold text-green-500'>{roundToOneDecimal(gameState.multiplier)}X</h2>
             <p className='text-white text-sm'>Cash out available: {gameState.credits.toFixed(2)} tokens</p>
           </div>
         )}
@@ -305,6 +323,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
                 const isCurrentRow = level === currentLevel;
                 const isPastRow = level < currentLevel;
                 const rowState = gameHistory[level] || ['unknown', 'unknown', 'unknown'];
+                const isCracking = crackingRocks[`${rowIndex}-${colIndex}`];
 
                 return (
                   <div 
@@ -317,8 +336,8 @@ export default function GamingArea({ changeState, resetState, state, setState }:
                       rowState[colIndex] === 'magma' ? <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' /> :
                       <img src={`/assets/blueRock.png`} className="w-[124px]" alt='blue rock' />
                     ) : isCurrentRow ? (
-                      breakingRock && playerPosition?.col === colIndex ? (
-                        <img src={`/assets/crackedBlue.png`} className="w-[124px]" alt='cracked blue rock' />
+                      isCracking ? (
+                        <img src={`/assets/crackedBlue.png`} className="w-[124px] animate-shake" alt='cracked blue rock' />
                       ) : (
                         <img src={`/assets/blueRock.png`} className="w-[124px] animate-pulse" alt='blue rock' />
                       )
