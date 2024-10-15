@@ -8,7 +8,7 @@ export const placeBet = async (betAmount: number) => {
       process: tokenContractId,
       tags: [
         { name: "Action", value: "Transfer" },
-        { name: "Recipient", value: "ih1XlIJWNtaG_544IIHMFw9BOp3HBOQ5fwJogeIY76w" },
+        { name: "Recipient", value: gameProcessId },
         { name: "Quantity", value: betAmount.toString() },
       ],
       signer: createDataItemSigner(window.arweaveWallet),
@@ -102,7 +102,7 @@ export const cashOut = async (gameId: string) => {
   
       const { Output, Messages } = await result({
         message: response,
-        process: "ih1XlIJWNtaG_544IIHMFw9BOp3HBOQ5fwJogeIY76w",
+        process: gameProcessId,
       });
   
       if (Messages && Messages.length > 0) {

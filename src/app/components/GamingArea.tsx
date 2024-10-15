@@ -14,7 +14,7 @@ interface GamingAreaProps {
 }
 
 interface GameState {
-  status: 'active' | 'lost';
+  status: 'active' | 'lost' | 'won';
   level: number;
   multiplier: number;
   credits: number;
@@ -37,6 +37,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [gameHistory, setGameHistory] = useState<GameHistory>({});
   const { connected } = useConnection();
+  const [currentLevel, setCurrentLevel] = useState<number>(1);
 
   const rows = 7;
   const columns = 3;
@@ -64,16 +65,24 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       // Update game history for the current level
       setGameHistory(prev => ({
         ...prev,
-        [response.level]: response.row
+        [currentLevel]: response.row
       }));
 
       if (response.status === 'lost') {
         setShowAll(true);
         setGameStarted(false);
         handleLoss();
-      } else {
-        setState(response.level);
+      } else if (response.status === 'won' || currentLevel === 7) {
         setShowAll(true);
+        setGameStarted(false);
+        handleWin();
+      } else {
+        setState(currentLevel);
+        setCurrentLevel(prev => prev + 1);
+        // Move to the next level after a short delay
+        setTimeout(() => {
+          setShowAll(false);
+        }, 1000);
       }
     } catch (error) {
       console.error("Error making move:", error);
@@ -84,7 +93,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     setTimeout(() => {
       setBreakingRock(false);
     }, 500);
-  }, [betPlaced, gameId, gameStarted, setState]);
+  }, [betPlaced, gameId, gameStarted, setState, currentLevel]);
 
   const handleLoss = () => {
   
@@ -127,29 +136,27 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     setInputValue('');
     setGameId(null);
     setIsAutoPicking(false);
+    setCurrentLevel(1);
     resetState();
   };
 
   const AutoPick = useCallback(() => {
-    if (!betPlaced || !gameId) {
+    if (!betPlaced || !gameId || !gameState) {
       alert('Please place a bet before starting the game!');
       return;
     }
 
-    setGameStarted(true);
-    setIsAutoPicking(true);
+    setIsAutoPicking(!isAutoPicking);
+  }, [betPlaced, gameId, gameState, isAutoPicking]);
 
-    const autoPickInterval = setInterval(async () => {
-      if (!gameState || gameState.status === 'lost') {
-        clearInterval(autoPickInterval);
-        setIsAutoPicking(false);
-        return;
-      }
+  const handleAutoPickStart = useCallback(() => {
+    if (!gameState || gameState.status !== 'active') {
+      return;
+    }
 
-      const randomColIndex = Math.floor(Math.random() * 3);
-      await handlePrizeClick(8 - gameState.level, randomColIndex);
-    }, 1000);
-  }, [betPlaced, gameId, gameState, handlePrizeClick]);
+    const randomColIndex = Math.floor(Math.random() * 3);
+    handlePrizeClick(8 - gameState.level, randomColIndex);
+  }, [gameState, handlePrizeClick]);
 
   const handlePlaceBet = async () => {
     if (!connected) {
@@ -171,6 +178,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           credits: betAmount,
           row: ['unknown', 'unknown', 'unknown']
         });
+        setCurrentLevel(1);
       } catch (error) {
         console.error("Error placing bet:", error);
         alert('An error occurred while placing your bet. Please try again.');
@@ -180,7 +188,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     }
   };
 
-  const handleCashOut = async () => {
+  const handleCashOut = useCallback(async () => {
     if (!gameId || !gameState) {
       alert('No active game to cash out from.');
       return;
@@ -194,11 +202,28 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       console.error("Error during cash out:", error);
       alert('An error occurred while cashing out. Please try again.');
     }
-  };
+  }, [gameId, gameState, resetGame]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
   };
+
+  const handleWin = useCallback(async () => {
+    if (!gameState) return;
+    
+    const result = await new Promise<boolean>((resolve) => {
+      if (currentLevel === 7) {
+        alert(`Congratulations! You've reached the top level and won ${gameState.credits.toFixed(2)} tokens! Press OK to cash out.`);
+      } else {
+        alert(`Congratulations! You've won ${gameState.credits.toFixed(2)} tokens! Press OK to cash out.`);
+      }
+      resolve(true);
+    });
+
+    if (result) {
+      await handleCashOut();
+    }
+  }, [gameState, currentLevel, handleCashOut]);
 
   return (
     <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
@@ -211,10 +236,10 @@ export default function GamingArea({ changeState, resetState, state, setState }:
             Manual
           </Button>
           <Button 
-            className='w-32 bg-[#872219] hover:bg-[#9f2a1f] focus:bg-[#6f1c14] text-white'
-            onClick={() => { setIsAutoPicking(true); }}
+            className={`w-32 ${isAutoPicking ? 'bg-[#9f2a1f] hover:bg-[#872219]' : 'bg-[#872219] hover:bg-[#9f2a1f]'} focus:bg-[#6f1c14] text-white`}
+            onClick={AutoPick}
           >
-            AutoPick
+            {isAutoPicking ? 'Stop Auto' : 'AutoPick'}
           </Button>
         </div>
         <div className='px-4 flex flex-col gap-4'>
@@ -237,10 +262,10 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           {isAutoPicking && (
             <Button 
               className='w-full bg-[#23C55E] hover:bg-[#31ed76]' 
-              onClick={AutoPick}
-              disabled={!betPlaced}
+              onClick={handleAutoPickStart}
+              disabled={!betPlaced || !gameState || gameState.status !== 'active'}
             >
-              Start
+              Start Auto-Pick
             </Button>
           )}
         </div>
@@ -253,7 +278,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
             ? <Button className='w-full bg-green-600' onClick={handleCashOut}>Checkout</Button>
             : <Button className='w-full hidden bg-green-600'>Start</Button>}
         </div>
-        {gameStarted && gameState && gameState.multiplier > 1 && (
+        {gameState && gameState.level >= 2 && (
           <div className='absolute bottom-5 left-1/2 transform -translate-x-1/2 w-[280px] h-[90px] flex flex-col items-center justify-center px-4 bg-stone-500 py-2 rounded-xl'>
             <h2 className='text-3xl font-bold text-green-500'>{gameState.multiplier.toFixed(2)}X</h2>
             <p className='text-white text-sm'>Cash out available: {gameState.credits.toFixed(2)} tokens</p>
@@ -277,7 +302,6 @@ export default function GamingArea({ changeState, resetState, state, setState }:
             {Array.from({ length: rows }, (_, rowIndex) => (
               Array.from({ length: columns }, (_, colIndex) => {
                 const level = rows - rowIndex;
-                const currentLevel = gameState?.level || 1;
                 const isCurrentRow = level === currentLevel;
                 const isPastRow = level < currentLevel;
                 const rowState = gameHistory[level] || ['unknown', 'unknown', 'unknown'];
@@ -288,17 +312,13 @@ export default function GamingArea({ changeState, resetState, state, setState }:
                     className='bg-transparent relative' 
                     onClick={() => isCurrentRow ? handlePrizeClick(rowIndex, colIndex) : null}
                   >
-                    {isPastRow ? (
+                    {isPastRow || (isCurrentRow && showAll) ? (
                       rowState[colIndex] === 'reward' ? <Totemrock /> : 
                       rowState[colIndex] === 'magma' ? <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' /> :
                       <img src={`/assets/blueRock.png`} className="w-[124px]" alt='blue rock' />
                     ) : isCurrentRow ? (
                       breakingRock && playerPosition?.col === colIndex ? (
                         <img src={`/assets/crackedBlue.png`} className="w-[124px]" alt='cracked blue rock' />
-                      ) : showAll ? (
-                        rowState[colIndex] === 'reward' ? <Totemrock /> : 
-                        rowState[colIndex] === 'magma' ? <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' /> :
-                        <img src={`/assets/blueRock.png`} className="w-[124px]" alt='blue rock' />
                       ) : (
                         <img src={`/assets/blueRock.png`} className="w-[124px] animate-pulse" alt='blue rock' />
                       )
