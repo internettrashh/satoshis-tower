@@ -38,7 +38,7 @@ const roundToOneDecimal = (value: number) => {
   return Math.round(value * 10) / 10;
 };
 
-export default function GamingArea({ changeState, resetState, state, setState }: GamingAreaProps) {
+export default function GamingArea({  resetState,  setState }: GamingAreaProps) {
   const [showAll, setShowAll] = useState<boolean>(false);
   const [breakingRock, setBreakingRock] = useState<boolean>(false);
   const [isAutoPicking, setIsAutoPicking] = useState(false);
@@ -57,16 +57,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
   const rows = 7;
   const columns = 3;
 
-  const steps = [
-    { value: 1, label: "1x" },
-    { value: 1.5, label: "1.5x" },
-    { value: 2.5, label: "2.5x" },
-    { value: 5, label: "5x" },
-    { value: 10, label: "10x" },
-    { value: 25, label: "25x" },
-    { value: 50, label: "50x" },
-    { value: 100, label: "100x" },
-  ];
+ 
 
   const handlePrizeClick = useCallback(async (rowIndex: number, colIndex: number) => {
     if (!betPlaced || !gameId) {
@@ -186,7 +177,8 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     }
 
     const randomColIndex = Math.floor(Math.random() * 3);
-    handlePrizeClick(8 - gameState.level, randomColIndex);
+    const rowIndex = 7 - gameState.level; // Calculate the correct row index
+    handlePrizeClick(rowIndex, randomColIndex);
   }, [gameState, handlePrizeClick]);
 
   const handlePlaceBet = async () => {
@@ -649,7 +641,7 @@ const VerticalProgressBar: React.FC<ProgressBarProps> = ({ value, maxValue, step
           marginTop: '20px',
           marginBottom: '20px'
         }}
-        src="assets/jackoptlogo.png" 
+        src="./assets/jackpotlogo.png" 
         alt="Jackpot" 
       />
 

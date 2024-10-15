@@ -32,6 +32,7 @@ const roundToOneDecimal = (value: number) => {
 
 export default function GamingArea({  resetState,  setState }: GamingAreaProps) {
   const [showAll, setShowAll] = useState<boolean>(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [breakingRock, setBreakingRock] = useState<boolean>(false);
   const [isAutoPicking, setIsAutoPicking] = useState(false);
   const [playerPosition, setPlayerPosition] = useState<{ row: number; col: number; y: number } | null>(null);
