@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, {  useState, useCallback } from 'react';
 import Totemrock from './Totemrock';
 import { Button } from '@/components/ui/button';
 import { ConnectButton, useConnection } from 'arweave-wallet-kit';
 import { cashOut, placeBet, makeMove } from '@/lib/ao-lib';
+import { Loader2 } from 'lucide-react'; // Import the loader icon
 
 interface GamingAreaProps {
   changeState: () => void;
@@ -29,7 +30,7 @@ const roundToOneDecimal = (value: number) => {
   return Math.round(value * 10) / 10;
 };
 
-export default function GamingArea({ changeState, resetState, state, setState }: GamingAreaProps) {
+export default function GamingArea({  resetState,  setState }: GamingAreaProps) {
   const [showAll, setShowAll] = useState<boolean>(false);
   const [breakingRock, setBreakingRock] = useState<boolean>(false);
   const [isAutoPicking, setIsAutoPicking] = useState(false);
@@ -43,20 +44,12 @@ export default function GamingArea({ changeState, resetState, state, setState }:
   const { connected } = useConnection();
   const [currentLevel, setCurrentLevel] = useState<number>(1);
   const [crackingRocks, setCrackingRocks] = useState<{ [key: string]: boolean }>({});
+  const [isPlacingBet, setIsPlacingBet] = useState(false);
 
   const rows = 7;
   const columns = 3;
 
-  const steps = [
-    { value: 1, label: "1x" },
-    { value: 1.5, label: "1.5x" },
-    { value: 2.5, label: "2.5x" },
-    { value: 5, label: "5x" },
-    { value: 10, label: "10x" },
-    { value: 25, label: "25x" },
-    { value: 50, label: "50x" },
-    { value: 100, label: "100x" },
-  ];
+ 
 
   const handlePrizeClick = useCallback(async (rowIndex: number, colIndex: number) => {
     if (!betPlaced || !gameId) {
@@ -176,7 +169,8 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     }
 
     const randomColIndex = Math.floor(Math.random() * 3);
-    handlePrizeClick(8 - gameState.level, randomColIndex);
+    const rowIndex = 7 - gameState.level; // Calculate the correct row index
+    handlePrizeClick(rowIndex, randomColIndex);
   }, [gameState, handlePrizeClick]);
 
   const handlePlaceBet = async () => {
@@ -187,6 +181,7 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     
     if (inputValue && parseFloat(inputValue) > 0) {
       const betAmount = parseFloat(inputValue);
+      setIsPlacingBet(true);
       try {
         const newGameId = await placeBet(betAmount * 1000000000000);
         console.log("gameId", newGameId);
@@ -203,6 +198,8 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       } catch (error) {
         console.error("Error placing bet:", error);
         alert('An error occurred while placing your bet. Please try again.');
+      } finally {
+        setIsPlacingBet(false);
       }
     } else {
       alert('Please enter a valid bet amount!');
@@ -275,9 +272,18 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           <Button 
             className='w-full bg-[#23C55E] hover:bg-[#31ed76]' 
             onClick={handlePlaceBet}
-            disabled={betPlaced}
+            disabled={betPlaced || isPlacingBet}
           >
-            {betPlaced ? 'Bet Placed' : 'Place Bet'}
+            {isPlacingBet ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Placing Bet...
+              </>
+            ) : betPlaced ? (
+              'Bet Placed'
+            ) : (
+              'Place Bet'
+            )}
           </Button>
           <ConnectButton />
           {isAutoPicking && (

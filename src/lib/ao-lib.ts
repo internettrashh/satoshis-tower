@@ -4,6 +4,7 @@ const gameProcessId = "ih1XlIJWNtaG_544IIHMFw9BOp3HBOQ5fwJogeIY76w";
 const tokenContractId = "pEbKJIK4PnClZrB_nZUvjPVDOHhp36PkvphrhN2_lDs";
 export const placeBet = async (betAmount: number) => {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const response = await message({
       process: tokenContractId,
       tags: [
@@ -35,6 +36,7 @@ export const makeMove = async (gameId: string, column: number) => {
       data: JSON.stringify({ gameId, column: column + 1 }),
     });
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { Output, Messages } = await result({
       message: response,
       process: gameProcessId,
@@ -53,6 +55,7 @@ export const makeMove = async (gameId: string, column: number) => {
 
 export const getGameId = async () => {
   let newGameId;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let cursor = null;
 
   while (newGameId === undefined) {
@@ -100,6 +103,7 @@ export const cashOut = async (gameId: string) => {
         data: JSON.stringify({ gameId }),
       });
   
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { Output, Messages } = await result({
         message: response,
         process: gameProcessId,
