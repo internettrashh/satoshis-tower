@@ -54,6 +54,9 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     setBreakingRock(true);
     setPlayerPosition({ row: rowIndex, col: colIndex, y: 0 });
 
+    // Add a delay to show the cracked rock
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     try {
       const response = await makeMove(gameId, colIndex);
       setGameState(response);
@@ -70,18 +73,21 @@ export default function GamingArea({ changeState, resetState, state, setState }:
         handleLoss();
       } else {
         setState(response.level);
+        setShowAll(true);
       }
     } catch (error) {
       console.error("Error making move:", error);
       alert('An error occurred while making your move. Please try again.');
     }
 
+    // Delay resetting breakingRock to allow for the reveal animation
     setTimeout(() => {
       setBreakingRock(false);
     }, 500);
   }, [betPlaced, gameId, gameStarted, setState]);
 
   const handleLoss = () => {
+  
     const initialJump = 20;
     setPlayerPosition(prev => prev ? { ...prev, y: prev.y - initialJump } : null);
 
@@ -282,14 +288,20 @@ export default function GamingArea({ changeState, resetState, state, setState }:
                     className='bg-transparent relative' 
                     onClick={() => isCurrentRow ? handlePrizeClick(rowIndex, colIndex) : null}
                   >
-                    {isPastRow || (showAll && level === currentLevel) ? (
+                    {isPastRow ? (
                       rowState[colIndex] === 'reward' ? <Totemrock /> : 
                       rowState[colIndex] === 'magma' ? <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' /> :
                       <img src={`/assets/blueRock.png`} className="w-[124px]" alt='blue rock' />
                     ) : isCurrentRow ? (
-                      breakingRock && playerPosition?.col === colIndex ?
-                        <img src={`/assets/crackedBlue.png`} className="w-[124px]" alt='cracked blue rock' /> :
+                      breakingRock && playerPosition?.col === colIndex ? (
+                        <img src={`/assets/crackedBlue.png`} className="w-[124px]" alt='cracked blue rock' />
+                      ) : showAll ? (
+                        rowState[colIndex] === 'reward' ? <Totemrock /> : 
+                        rowState[colIndex] === 'magma' ? <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' /> :
+                        <img src={`/assets/blueRock.png`} className="w-[124px]" alt='blue rock' />
+                      ) : (
                         <img src={`/assets/blueRock.png`} className="w-[124px] animate-pulse" alt='blue rock' />
+                      )
                     ) : (
                       <img src={`/assets/basicRock.png`} className="w-[124px]" alt='basic rock' />
                     )}
