@@ -3,9 +3,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import Totemrock from './Totemrock';
 import { Button } from '@/components/ui/button';
-import { ConnectButton, useConnection, useActiveAddress } from 'arweave-wallet-kit';
-import { createDataItemSigner, result, message } from "@permaweb/aoconnect";
-//import { toast } from 'react-toastify';
+import { ConnectButton, useConnection } from 'arweave-wallet-kit';
+import { cashOut, placeBet, makeMove } from '@/lib/ao-lib';
 
 interface GamingAreaProps {
   changeState: () => void;
@@ -14,54 +13,36 @@ interface GamingAreaProps {
   setState: React.Dispatch<React.SetStateAction<number>>;
 }
 
-interface Row {
-  prizes: string[];
+interface GameState {
+  status: 'active' | 'lost';
+  level: number;
+  multiplier: number;
+  credits: number;
+  row: ('unknown' | 'reward' | 'magma')[];
+}
+
+interface GameHistory {
+  [level: number]: GameState['row'];
 }
 
 export default function GamingArea({ changeState, resetState, state, setState }: GamingAreaProps) {
   const [showAll, setShowAll] = useState<boolean>(false);
   const [breakingRock, setBreakingRock] = useState<boolean>(false);
   const [isAutoPicking, setIsAutoPicking] = useState(false);
-  const [lost, setLost] = useState<boolean>(false);
-  const [money, setMoney] = useState<number>(0);
-  const [originalMoney, setOriginalMoney] = useState<number>(0);
   const [playerPosition, setPlayerPosition] = useState<{ row: number; col: number; y: number } | null>(null);
   const [betPlaced, setBetPlaced] = useState<boolean>(false);
   const [inputValue, setInputValue] = useState<string>('');
   const [gameStarted, setGameStarted] = useState<boolean>(false);
-  const [multiplier, setMultiplier] = useState<number>(1);
   const [gameId, setGameId] = useState<string | null>(null);
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [gameHistory, setGameHistory] = useState<GameHistory>({});
   const { connected } = useConnection();
 
-  const rows: Row[] = [
-    { prizes: ['Prize 1A', 'Prize 1B', 'Prize 1C'] },
-    { prizes: ['Prize 2A', 'Prize 2B', 'Prize 2C'] },
-    { prizes: ['Prize 3A', 'Prize 3B', 'Prize 3C'] },
-    { prizes: ['Prize 4A', 'Prize 4B', 'Prize 4C'] },
-    { prizes: ['Prize 5A', 'Prize 5B', 'Prize 5C'] },
-    { prizes: ['Prize 6A', 'Prize 6B', 'Prize 6C'] },
-    { prizes: ['Prize 7A', 'Prize 7B', 'Prize 7C'] },
-  ];
+  const rows = 7;
+  const columns = 3;
 
-  const [correctPrizes, setCorrectPrizes] = useState<string[]>([]);
-  const [currentRow, setCurrentRow] = useState<number>(rows.length - 1);
-  const [clickedPrizes, setClickedPrizes] = useState<string>('');
-
-  const generateRandomCorrectPrizes = useCallback(() => {
-    const randomPrizes: string[] = rows.map(row => {
-      const randomIndex = Math.floor(Math.random() * row.prizes.length);
-      return row.prizes[randomIndex];
-    });
-    setCorrectPrizes(randomPrizes);
-    console.log(randomPrizes);
-  }, []);
-
-  useEffect(() => {
-    generateRandomCorrectPrizes();
-  }, [generateRandomCorrectPrizes]);
-
-  const handlePrizeClick = useCallback(async (rowIndex: number, colIndex: number, selectedPrize: string) => {
-    if (!betPlaced) {
+  const handlePrizeClick = useCallback(async (rowIndex: number, colIndex: number) => {
+    if (!betPlaced || !gameId) {
       alert('Please place a bet before starting the game!');
       return;
     }
@@ -70,130 +51,99 @@ export default function GamingArea({ changeState, resetState, state, setState }:
       setGameStarted(true);
     }
 
+    setBreakingRock(true);
+    setPlayerPosition({ row: rowIndex, col: colIndex, y: 0 });
+
     try {
-      const response = await message({
-        process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
-        tags: [
-          { name: "Action", value: "MakeMove" },
-        ],
-        signer: createDataItemSigner(window.arweaveWallet),
-        data: JSON.stringify({ gameId: gameId, column: colIndex }),
-      });
-     
-      const { Output, Messages } = await result({
-        message: response,
-        process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
-      });
+      const response = await makeMove(gameId, colIndex);
+      setGameState(response);
 
-      if (Messages && Messages.length > 0) {
-        const gameData = JSON.parse(Messages[0].Data);
-        console.log("Game state update:", gameData);
+      // Update game history for the current level
+      setGameHistory(prev => ({
+        ...prev,
+        [response.level]: response.row
+      }));
 
-        setClickedPrizes(selectedPrize);
-        setBreakingRock(true);
-        setPlayerPosition({ row: rowIndex, col: colIndex, y: 0 });
-
-        // Update game state based on server response
-        setMultiplier(gameData.multiplier);
-        setMoney(gameData.winnings);
-        setState(gameData.level);
-
-        if (gameData.outcome === 'reward') {
-          // Totem revealed
-          if (currentRow > 0) {
-            setCurrentRow(prev => prev - 1);
-          } else {
-            console.log('You have completed all rows!');
-          }
-        } else if (gameData.outcome === 'mine') {
-          // Red lava rock revealed - game over
-          setLost(true);
-          resetState();
-          setCurrentRow(rows.length - 1);
-          setShowAll(true);
-          setGameStarted(false);
-          
-          // Animate player falling
-          const initialJump = 20;
-          setPlayerPosition(prev => prev ? { ...prev, y: prev.y - initialJump } : null);
-        
-          setTimeout(() => {
-            let fallDistance = 0;
-            const fallAnimation = setInterval(() => {
-              setPlayerPosition(prev => {
-                if (prev) {
-                  fallDistance += 10;
-                  const newY = prev.y + fallDistance;
-                  if (newY < 700) {
-                    return { ...prev, y: newY };
-                  } else {
-                    clearInterval(fallAnimation);
-                    return null;
-                  }
-                }
-                return null;
-              });
-            }, 50);
-          }, 200);
-        }
-
-        if (gameData.status !== 'active') {
-          setBetPlaced(false);
-          setGameStarted(false);
-        }
+      if (response.status === 'lost') {
+        setShowAll(true);
+        setGameStarted(false);
+        handleLoss();
+      } else {
+        setState(response.level);
       }
-
     } catch (error) {
       console.error("Error making move:", error);
       alert('An error occurred while making your move. Please try again.');
     }
 
-    setBreakingRock(false);
-  }, [betPlaced, gameStarted, gameId, currentRow, rows.length, resetState, setState]);
+    setTimeout(() => {
+      setBreakingRock(false);
+    }, 500);
+  }, [betPlaced, gameId, gameStarted, setState]);
+
+  const handleLoss = () => {
+    const initialJump = 20;
+    setPlayerPosition(prev => prev ? { ...prev, y: prev.y - initialJump } : null);
+
+    setTimeout(() => {
+      setBreakingRock(false);
+      
+      let fallDistance = 0;
+      const fallAnimation = setInterval(() => {
+        setPlayerPosition(prev => {
+          if (prev) {
+            fallDistance += 10;
+            const newY = prev.y + fallDistance;
+            if (newY < 700) {
+              return { ...prev, y: newY };
+            } else {
+              clearInterval(fallAnimation);
+              setTimeout(() => {
+                alert('Game Over! You hit magma.');
+                resetGame();
+              }, 100);
+              return null;
+            }
+          }
+          return null;
+        });
+      }, 50);
+    }, 200);
+  };
+
+  const resetGame = () => {
+    setShowAll(false);
+    setGameStarted(false);
+    setBetPlaced(false);
+    setGameState(null);
+    setGameHistory({});
+    setPlayerPosition(null);
+    setInputValue('');
+    setGameId(null);
+    setIsAutoPicking(false);
+    resetState();
+  };
 
   const AutoPick = useCallback(() => {
-    if (!betPlaced) {
-     console.log('Please place a bet before starting the game!');
+    if (!betPlaced || !gameId) {
+      alert('Please place a bet before starting the game!');
       return;
     }
 
     setGameStarted(true);
+    setIsAutoPicking(true);
 
-    let currentAutoRow = rows.length - 1;
-  
-    const autoPickInterval = setInterval(() => {
-      if (currentAutoRow < 0 || lost) {
+    const autoPickInterval = setInterval(async () => {
+      if (!gameState || gameState.status === 'lost') {
         clearInterval(autoPickInterval);
+        setIsAutoPicking(false);
         return;
       }
 
-      setBreakingRock(true);
-      setIsAutoPicking(true);
-      const randomPrizeIndex = Math.floor(Math.random() * rows[currentAutoRow].prizes.length);
-      const randomPrize = rows[currentAutoRow].prizes[randomPrizeIndex];
-      handlePrizeClick(currentAutoRow, randomPrizeIndex, randomPrize);
-      
-      currentAutoRow--;
+      const randomColIndex = Math.floor(Math.random() * 3);
+      await handlePrizeClick(8 - gameState.level, randomColIndex);
     }, 1000);
-  }, [betPlaced, rows, lost, handlePrizeClick]);
-  
-  useEffect(() => {
-    if (state === 1) {
-      setMoney(originalMoney * 1.5);
-    } else if (state === 2) {
-      setMoney(originalMoney * 2.5);
-    } else if (state === 3) {
-      setMoney(originalMoney * 5);
-    } else if (state === 4) {
-      setMoney(originalMoney * 10);
-    } else if (state === 5) {
-      setMoney(originalMoney * 25);
-    } else if (state === 6) {
-      setMoney(originalMoney * 50);
-    } else if (state === 7) {
-      setMoney(originalMoney * 100);
-    }
-  }, [state, originalMoney]);
+  }, [betPlaced, gameId, gameState, handlePrizeClick]);
 
   const handlePlaceBet = async () => {
     if (!connected) {
@@ -203,32 +153,18 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     
     if (inputValue && parseFloat(inputValue) > 0) {
       const betAmount = parseFloat(inputValue);
-      setOriginalMoney(betAmount);
-  
       try {
-        const response = await message({
-          process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
-          tags: [
-            { name: "Action", value: "StartGame" },
-          ],
-          signer: createDataItemSigner(window.arweaveWallet),
-          data: JSON.stringify({ initialBet: betAmount }),
-        });
-       
-        const { Output, Messages } = await result({
-          message: response,
-          process: "iidHy7c_Kpj88VItrw8wAN921ZQaX7X3lsBMiQw_kTY",
-        });
-       
-        if (Messages && Messages.length > 0) {
-          const gameData = JSON.parse(Messages[0].Data);
-          const newGameId = gameData.gameId;
-          console.log("Game ID:", newGameId);
-          setGameId(newGameId);
-        }
-        console.log("Bet placed successfully");
+        const newGameId = await placeBet(betAmount * 1000000000000);
+        console.log("gameId", newGameId);
+        setGameId(newGameId);
         setBetPlaced(true);
-      
+        setGameState({
+          status: 'active',
+          level: 1,
+          multiplier: 1,
+          credits: betAmount,
+          row: ['unknown', 'unknown', 'unknown']
+        });
       } catch (error) {
         console.error("Error placing bet:", error);
         alert('An error occurred while placing your bet. Please try again.');
@@ -238,16 +174,28 @@ export default function GamingArea({ changeState, resetState, state, setState }:
     }
   };
 
+  const handleCashOut = async () => {
+    if (!gameId || !gameState) {
+      alert('No active game to cash out from.');
+      return;
+    }
+
+    try {
+      const cashOutResult = await cashOut(gameId);
+      alert(`Successfully cashed out ${cashOutResult} credits!`);
+      resetGame();
+    } catch (error) {
+      console.error("Error during cash out:", error);
+      alert('An error occurred while cashing out. Please try again.');
+    }
+  };
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputValue(e.target.value);
   };
 
-
   return (
     <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
-       {/* <div className='absolute mt-12  top-6 right-[360px] z-50'>
-       <img src="/assets/money.png" alt="" className='w-[600px]' />
-       </div> */}
       <div className='w-[300px] relative h-[700px] bg-black rounded-sm'>
         <div className='flex gap-3 py-7 px-4'>
           <Button 
@@ -256,7 +204,6 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           >
             Manual
           </Button>
-      
           <Button 
             className='w-32 bg-[#872219] hover:bg-[#9f2a1f] focus:bg-[#6f1c14] text-white'
             onClick={() => { setIsAutoPicking(true); }}
@@ -293,17 +240,17 @@ export default function GamingArea({ changeState, resetState, state, setState }:
         </div>
         <div className='py-10 px-4'>
           <h2 className='text-white'>Profit/Loss</h2>
-          <h2 className='text-xl text-green-600'>${money}</h2>
+          <h2 className='text-xl text-green-600'>${gameState?.credits || 0}</h2>
         </div>
         <div className='px-4 '>
-          {currentRow !== rows.length - 1 
-            ? <Button className='w-full bg-green-600' onClick={() => { alert(`Checked Out with ${money}$`); }}>Checkout</Button>
+          {gameState && gameState.status === 'active' && gameState.level > 1
+            ? <Button className='w-full bg-green-600' onClick={handleCashOut}>Checkout</Button>
             : <Button className='w-full hidden bg-green-600'>Start</Button>}
         </div>
-        {gameStarted && multiplier > 1 && (
+        {gameStarted && gameState && gameState.multiplier > 1 && (
           <div className='absolute bottom-5 left-1/2 transform -translate-x-1/2 w-[280px] h-[90px] flex flex-col items-center justify-center px-4 bg-stone-500 py-2 rounded-xl'>
-            <h2 className='text-3xl font-bold text-green-500'>{multiplier.toFixed(1)}X</h2>
-            <p className='text-white text-sm'>Cash out available: {(originalMoney * multiplier).toFixed(2)} tokens</p>
+            <h2 className='text-3xl font-bold text-green-500'>{gameState.multiplier.toFixed(2)}X</h2>
+            <p className='text-white text-sm'>Cash out available: {gameState.credits.toFixed(2)} tokens</p>
           </div>
         )}
         {!gameStarted && (
@@ -320,42 +267,37 @@ export default function GamingArea({ changeState, resetState, state, setState }:
           style={{ top: '-24px' }}
         ></div>
         <div className='relative z-10'>
-          {showAll 
-            ? (
-              <div className="grid grid-cols-3 grid-rows-7 gap-3">
-                {rows.map((row, rowIndex) => (
-                  row.prizes.map((prize, prizeIndex) => (
-                    <div key={`${rowIndex}-${prizeIndex}`} className='bg-transparent'>
-                      {correctPrizes[rowIndex] === prize 
-                        ? <Totemrock /> 
-                        : <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' />
-                      }
-                    </div>
-                  ))
-                ))}
-              </div>
-            )
-            : (
-              <div className="grid grid-cols-3 grid-rows-7 gap-3">
-                {rows.map((row, rowIndex) => (
-                  row.prizes.map((prize, prizeIndex) => (
-                    <div key={`${rowIndex}-${prizeIndex}`} className='bg-transparent relative' onClick={() => handlePrizeClick(rowIndex, prizeIndex, prize)}>
-                      {rowIndex <= currentRow 
-                        ? rowIndex === currentRow 
-                          ? prize === clickedPrizes && breakingRock 
-                            ? <img src={`/assets/crackedBlue.png`} className="w-[124px]" alt='cracked blue rock' /> 
-                            : <img src={`/assets/blueRock.png`} className="w-[124px] animate-pulse" alt='blue rock' />
-                          : <img src={`/assets/basicRock.png`} className="w-[124px]" alt='basic rock' />
-                        : correctPrizes[rowIndex] === prize 
-                          ? <Totemrock /> 
-                          : <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' />
-                      }
-                    </div>
-                  ))
-                ))}
-              </div>
-            )
-          }
+          <div className="grid grid-cols-3 grid-rows-7 gap-3">
+            {Array.from({ length: rows }, (_, rowIndex) => (
+              Array.from({ length: columns }, (_, colIndex) => {
+                const level = rows - rowIndex;
+                const currentLevel = gameState?.level || 1;
+                const isCurrentRow = level === currentLevel;
+                const isPastRow = level < currentLevel;
+                const rowState = gameHistory[level] || ['unknown', 'unknown', 'unknown'];
+
+                return (
+                  <div 
+                    key={`${rowIndex}-${colIndex}`} 
+                    className='bg-transparent relative' 
+                    onClick={() => isCurrentRow ? handlePrizeClick(rowIndex, colIndex) : null}
+                  >
+                    {isPastRow || (showAll && level === currentLevel) ? (
+                      rowState[colIndex] === 'reward' ? <Totemrock /> : 
+                      rowState[colIndex] === 'magma' ? <img src={`/assets/glowLava3.png`} className="w-[124px]" alt='lava rock' /> :
+                      <img src={`/assets/blueRock.png`} className="w-[124px]" alt='blue rock' />
+                    ) : isCurrentRow ? (
+                      breakingRock && playerPosition?.col === colIndex ?
+                        <img src={`/assets/crackedBlue.png`} className="w-[124px]" alt='cracked blue rock' /> :
+                        <img src={`/assets/blueRock.png`} className="w-[124px] animate-pulse" alt='blue rock' />
+                    ) : (
+                      <img src={`/assets/basicRock.png`} className="w-[124px]" alt='basic rock' />
+                    )}
+                  </div>
+                );
+              })
+            ))}
+          </div>
           {playerPosition && (
             <img 
               src="/assets/character.png" 
@@ -371,6 +313,5 @@ export default function GamingArea({ changeState, resetState, state, setState }:
         </div>
       </div>
     </div>
-    
   );
 }
