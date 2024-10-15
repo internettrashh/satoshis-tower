@@ -82,7 +82,6 @@ export const getGameId = async () => {
 
       if (newGameId === undefined) {
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
-
         cursor = resultsOut.edges[resultsOut.edges.length - 1].cursor;
       }
     }
