@@ -245,7 +245,18 @@ export default function GamingArea({  resetState,  setState }: GamingAreaProps) 
   }, [gameState, currentLevel, handleCashOut]);
 
   return (
-    <div className='py-16 flex flex-row h-fit gap-x-10 justify-center items-center'>
+    <div className='py-1 flex flex-row h-fit gap-x-10 justify-center items-center relative'>
+      <img 
+        src="/assets/money.png" 
+        alt="money" 
+        className='absolute top-0 transform -translate-x-1/2 z-20'
+        style={{ 
+          width: '490px', // Adjust this value as needed
+          marginTop: '-20px', // Adjust this value to position the image vertically
+          left: 'calc(69% - 80px)', // Adjust this value to move left or right
+        }}
+      />
+      
       <div className='w-[300px] relative h-[700px] bg-black rounded-sm'>
         <div className='flex gap-3 py-7 px-4'>
           <Button 
