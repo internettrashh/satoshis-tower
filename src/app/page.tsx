@@ -26,7 +26,7 @@ const VerticalProgressBar: React.FC<ProgressBarProps> = ({ value, maxValue, step
           marginBottom: '20px'
         }}
         src="./assets/jackpotlogo.png" 
-        alt="Jackpot" 
+        alt="Jackpot"
       />
 
       <div className="relative h-[700px] w-5 ml-7 mb-11 -mt-10 ">
