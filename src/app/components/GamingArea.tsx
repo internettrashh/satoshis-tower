@@ -251,8 +251,8 @@ export default function GamingArea({  resetState,  setState }: GamingAreaProps) 
         alt="money" 
         className='absolute top-0 transform -translate-x-1/2 z-20'
         style={{ 
-          width: '490px', // Adjust this value as needed
-          marginTop: '-20px', // Adjust this value to position the image vertically
+          width: '500px', // Adjust this value as needed
+          marginTop: '-35px', // Adjust this value to position the image vertically
           left: 'calc(69% - 80px)', // Adjust this value to move left or right
         }}
       />
